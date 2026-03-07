@@ -26,7 +26,7 @@ export async function POST(req:NextRequest , res:NextResponse<Data>) {
     // now ensure that it already exist or not
     await fs.ensureDir(tempDir)
 
-    // clone repository
+    // clone repository and store into temp directory
     const git  = simpleGit()
     await git.clone(repo , tempDir)
 
