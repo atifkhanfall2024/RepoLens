@@ -7,53 +7,53 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-
-   
     const formData = await req.formData();
-
     const files = formData.getAll("file");
 
-    //console.log("FILES:",files);
-
-    if(!files.length){
-      return NextResponse.json({
-        success:false,
-        message:"No file received"
-      })
+    if (!files.length) {
+      return NextResponse.json({ success: false, message: "No file received" });
     }
 
+    // Optional: generate temp folder on server to preserve structure
     const folderName = crypto.randomBytes(6).toString("hex");
-
-    const tempDir = path.join(process.cwd(),"temprepo",folderName);
-
+    const tempDir = path.join(process.cwd(), "temprepo", folderName);
     await fs.ensureDir(tempDir);
 
-    for(const file of files){
-
-      if(file instanceof File){
-
-        const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
-
-        const filePath = path.join(tempDir,file.name);
-
-        await fs.writeFile(filePath,buffer);
-
+    // Save all files to tempDir while preserving nested paths
+    for (const file of files) {
+      if (file instanceof File) {
+        const relativePath = (file as any).webkitRelativePath || file.name;
+        const filePath = path.join(tempDir, relativePath);
+        await fs.ensureDir(path.dirname(filePath));
+        const buffer = Buffer.from(await file.arrayBuffer());
+        await fs.writeFile(filePath, buffer);
       }
     }
 
-    return NextResponse.json({
-      success:true,
-      folder:folderName
-    })
+    // Send all files via FormData to FastAPI
+    const formToPython = new FormData();
 
-  } catch(error){
+    for (const file of files) {
+      if (file instanceof File) {
+        const relativePath = (file as any).webkitRelativePath || file.name;
+        const blob = new Blob([await file.arrayBuffer()]);
+        formToPython.append("files", blob, relativePath); // preserve filename and folder
+      }
+    }
 
-    console.error("UPLOAD ERROR:",error);
+    const pythonAPI = "http://127.0.0.1:8000/Rag/data";
+    const response = await fetch(pythonAPI, {
+      method: "POST",
+      body: formToPython
+    });
 
-    return NextResponse.json({
-      success:false,
-      message:"Upload failed"
-    },{status:500})
+    const data = await response.json();
+    console.log("Python response:", data);
+
+    return NextResponse.json({ success: true, data });
+
+  } catch (error) {
+    console.error("UPLOAD ERROR:", error);
+    return NextResponse.json({ success: false, message: "Upload failed" }, { status: 500 });
   }
 }
