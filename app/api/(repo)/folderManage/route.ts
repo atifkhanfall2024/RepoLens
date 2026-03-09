@@ -1,38 +1,59 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import crypto from "crypto";
 import path from "path";
 import fs from "fs-extra";
-import formidable from "formidable";
+import { NextResponse } from "next/server";
 
-// Disable Next.js body parser for this API
 export const runtime = "nodejs";
 
-export  async function handler(req: NextApiRequest, res: NextApiResponse) {
- 
-
+export async function POST(req: Request) {
   try {
+
+   
+    const formData = await req.formData();
+
+    const files = formData.getAll("file");
+
+    //console.log("FILES:",files);
+
+    if(!files.length){
+      return NextResponse.json({
+        success:false,
+        message:"No file received"
+      })
+    }
+
     const folderName = crypto.randomBytes(6).toString("hex");
-    const tempDir = path.join(process.cwd(), "temprepo", folderName);
+
+    const tempDir = path.join(process.cwd(),"temprepo",folderName);
+
     await fs.ensureDir(tempDir);
 
-    const form = formidable({ multiples: true, uploadDir: tempDir, keepExtensions: true });
+    for(const file of files){
 
-    form.parse(req, (err, fields, files) => {
-      if (err) {
-        return res.status(400).json({ success: false, message: err.message });
+      if(file instanceof File){
+
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+
+        const filePath = path.join(tempDir,file.name);
+
+        await fs.writeFile(filePath,buffer);
+
       }
+    }
 
-      console.log("Uploaded files:", files);
+    return NextResponse.json({
+      success:true,
+      folder:folderName
+    })
 
-      res.status(200).json({
-        success: true,
-        message: "Files uploaded successfully",
-        folderPath: tempDir,
-        files,
-      });
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Something went wrong";
-    res.status(500).json({ success: false, message });
+  } catch(error){
+
+    console.error("UPLOAD ERROR:",error);
+
+    return NextResponse.json({
+      success:false,
+      message:"Upload failed"
+    },{status:500})
   }
 }
